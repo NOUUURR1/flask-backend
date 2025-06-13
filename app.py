@@ -2,6 +2,7 @@
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS  # type: ignore
 import bcrypt
+import os
 
 app = Flask(__name__)
 CORS(app)
@@ -62,9 +63,5 @@ def login():
 
 # تشغيل السيرفر
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8000, debug=True)
-import os
-
-if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT", 8000))
     app.run(host='0.0.0.0', port=port)
