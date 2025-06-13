@@ -1,0 +1,112 @@
+body {
+    font-family: 'Segoe UI', sans-serif;
+    background: #f0f4f8;
+    margin: 0;
+    padding: 20px;
+}
+
+.container {
+    max-width: 700px;
+    margin: auto;
+    background: #fff;
+    padding: 20px;
+    border-radius: 16px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.05);
+}
+
+h2 {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.cards {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+/* تصميم كرت المدونة */
+.card {
+    background: #fdfdfd;
+    padding: 15px;
+    border-radius: 12px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+
+.blog-card {
+    background-color: #fff;
+    padding: 20px;
+    border-radius: 16px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    position: relative;
+    text-align: left;
+}
+
+.avatar {
+    width: 60px;
+    height: 60px;
+    background-image: url('photos\mother.png'); 
+    background-size: cover;
+    background-position: center;
+    border-radius: 50%;
+    margin: auto;
+    margin-bottom: 10px;
+}
+
+.blog-title {
+    text-align: center;
+    color: #3b3b98;
+    margin-bottom: 10px;
+    font-weight: bold;
+}
+
+.blog-desc {
+    font-size: 14px;
+    color: #333;
+    margin-bottom: 15px;
+}
+
+.blog-buttons {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.btn {
+    flex: 1;
+    text-align: center;
+    background-color: #4fc1e9;
+    color: white;
+    text-decoration: none;
+    padding: 10px;
+    border-radius: 10px;
+    font-weight: bold;
+    transition: background-color 0.3s;
+}
+
+.btn:hover {
+    background-color: #3bb1d7;
+}
+
+.card iframe {
+    border-radius: 8px;
+    margin: 10px 0;
+}
+
+.card h3 {
+    margin-top: 0;
+}
+
+.card p {
+    font-size: 14px;
+    color: #444;
+}
+
+.card a {
+    display: inline-block;
+    margin-top: 8px;
+    color: #007bff;
+    text-decoration: none;
+}
