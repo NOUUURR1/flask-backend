@@ -7,41 +7,45 @@ import os
 app = Flask(__name__, static_folder='static', template_folder='templates')
 CORS(app)
 
-# إعداد قاعدة البيانات
+
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-# موديل المستخدم
+
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(120), unique=True, nullable=False)
+    full_name = db.Column(db.String(100))
+    email = db.Column(db.String(100), unique=True, nullable=False)
     password = db.Column(db.String(255), nullable=False)
+    birthdate = db.Column(db.String(20))
+    profile_image_url = db.Column(db.String(500))
 
-# إنشاء قاعدة البيانات
+
 with app.app_context():
     db.create_all()
 
-# صفحة HTML رئيسية
+
 @app.route('/')
 def home():
     return render_template('index.html')
 
-# API: تسجيل حساب جديد
+#  API
 @app.route('/signup', methods=['POST'])
 def signup():
     data = request.get_json()
+    full_name = data.get('full_name')
     email = data.get('email')
     password = data.get('password')
 
-    if not email or not password:
-        return jsonify({'message': 'Email and password are required'}), 400
+    if not email or not password or not full_name:
+        return jsonify({'message': 'Full name, email, and password are required'}), 400
 
     if User.query.filter_by(email=email).first():
         return jsonify({'message': 'User already exists'}), 400
 
     hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-    new_user = User(email=email, password=hashed_password)
+    new_user = User(full_name=full_name, email=email, password=hashed_password)
     db.session.add(new_user)
     db.session.commit()
 
@@ -50,7 +54,7 @@ def signup():
         'user_id': new_user.id
     }), 200
 
-# API: تسجيل الدخول
+#  API login
 @app.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
@@ -66,29 +70,60 @@ def login():
     else:
         return jsonify({'message': 'Invalid credentials'}), 401
 
-# API: مقالات التوعية
+#  API profile GET
+@app.route('/profile/<int:user_id>', methods=['GET'])
+def get_profile(user_id):
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    return jsonify({
+        "id": user.id,
+        "full_name": user.full_name,
+        "email": user.email,
+        "birthdate": user.birthdate,
+        "profile_image_url": user.profile_image_url
+    }), 200
+
+#  API profile PUT
+@app.route('/profile/<int:user_id>', methods=['PUT'])
+def update_profile(user_id):
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    data = request.get_json()
+    user.full_name = data.get("full_name", user.full_name)
+    user.birthdate = data.get("birthdate", user.birthdate)
+    user.profile_image_url = data.get("profile_image_url", user.profile_image_url)
+
+    db.session.commit()
+
+    return jsonify({"message": "Profile updated successfully"}), 200
+
+#  API articles
 awareness_articles = [
     {
         "title": "Positive Parenting Tips",
-        "description": "Learn 5 essential positive parenting strategies to build a strong, loving, and respectful relationship with your child.",
+        "description": "Learn 5 essential positive parenting strategies...",
         "video_url": "https://www.youtube.com/embed/BbXPrO2AlDk",
         "link": "https://happyyouhappyfamily.com/positive-parenting-videos/"
     },
     {
         "title": "Child Mental Health & Wellbeing",
-        "description": "Discover top 10 tips to promote your child's mental health and wellbeing from a safeguarding expert.",
+        "description": "Discover top 10 tips to promote your child's mental health...",
         "video_url": "https://www.youtube.com/embed/ld7tBeduqBI",
         "link": "https://www.youtube.com/watch?v=ld7tBeduqBI"
     },
     {
         "title": "Positive Parenting, Thriving Kids",
-        "description": "Access a series of 20 videos featuring caregivers, kids, and experts discussing pressing parenting questions.",
+        "description": "Access a series of 20 videos featuring caregivers...",
         "video_url": "https://www.youtube.com/embed/gcP3dx8Jvpc",
         "link": "https://childmind.org/positiveparenting/"
     },
     {
         "title": "Essentials for Parenting",
-        "description": "Explore CDC's resources offering expert advice, videos, and activities to help parents build nurturing relationships with their children.",
+        "description": "Explore CDC's resources offering expert advice...",
         "video_url": "https://www.youtube.com/embed/w1xHDmsSduA",
         "link": "https://www.cdc.gov/parents/essentials/index.html"
     },
@@ -98,7 +133,7 @@ awareness_articles = [
 def get_articles():
     return jsonify(awareness_articles)
 
-# تشغيل السيرفر
+#  Run Server
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=port, debug=True)
