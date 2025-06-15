@@ -4,9 +4,8 @@ from flask_cors import CORS
 import bcrypt
 import os
 
-app = Flask(__name__, static_folder='static', template_folder='templates')
+app = Flask(name, static_folder='static', template_folder='templates')
 CORS(app)
-
 
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -30,7 +29,7 @@ with app.app_context():
 def home():
     return render_template('index.html')
 
-#  API
+
 @app.route('/signup', methods=['POST'])
 def signup():
     data = request.get_json()
@@ -49,12 +48,9 @@ def signup():
     db.session.add(new_user)
     db.session.commit()
 
-    return jsonify({
-        'message': 'Signup successful',
-        'user_id': new_user.id
-    }), 200
+    return jsonify({'message': 'Signup successful', 'user_id': new_user.id}), 200
 
-#  API login
+
 @app.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
@@ -63,14 +59,11 @@ def login():
 
     user = User.query.filter_by(email=email).first()
     if user and bcrypt.checkpw(password.encode('utf-8'), user.password.encode('utf-8')):
-        return jsonify({
-            'message': 'Login successful',
-            'user_id': user.id
-        }), 200
+        return jsonify({'message': 'Login successful', 'user_id': user.id}), 200
     else:
         return jsonify({'message': 'Invalid credentials'}), 401
 
-#  API profile GET
+
 @app.route('/profile/<int:user_id>', methods=['GET'])
 def get_profile(user_id):
     user = User.query.get(user_id)
@@ -85,7 +78,7 @@ def get_profile(user_id):
         "profile_image_url": user.profile_image_url
     }), 200
 
-#  API profile PUT
+
 @app.route('/profile/<int:user_id>', methods=['PUT'])
 def update_profile(user_id):
     user = User.query.get(user_id)
@@ -98,10 +91,9 @@ def update_profile(user_id):
     user.profile_image_url = data.get("profile_image_url", user.profile_image_url)
 
     db.session.commit()
-
     return jsonify({"message": "Profile updated successfully"}), 200
 
-#  API articles
+
 awareness_articles = [
     {
         "title": "Positive Parenting Tips",
@@ -124,17 +116,15 @@ awareness_articles = [
     {
         "title": "Essentials for Parenting",
         "description": "Explore CDC's resources offering expert advice...",
-        "video_url":
-        "https://www.youtube.com/embed/w1xHDmsSduA",
+        "video_url": "https://www.youtube.com/embed/w1xHDmsSduA",
         "link": "https://www.cdc.gov/parents/essentials/index.html"
     },
 ]
-
 @app.route("/api/articles")
 def get_articles():
     return jsonify(awareness_articles)
 
-#  Run Server
-if name == '__main__':
+
+if name == 'main':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
