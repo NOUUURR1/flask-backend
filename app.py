@@ -1,28 +1,18 @@
 from flask import Flask, request, jsonify, render_template
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
-from flask_mail import Mail, Message
 import bcrypt
 import os
-import random
 
-app = Flask(name, static_folder='static', template_folder='templates')
+app = Flask(__name__, static_folder='static', template_folder='templates')
 CORS(app)
 
-# إعداد قاعدة البيانات
+
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-# إعدادات الإيميل
-app.config['MAIL_SERVER'] = 'smtp.gmail.com'
-app.config['MAIL_PORT'] = 587
-app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USERNAME'] = 'youremail@gmail.com'  # ← غيره لإيميلك
-app.config['MAIL_PASSWORD'] = 'your_app_password'    # ← باسورد التطبيق من Gmail
-mail = Mail(app)
 
-# جدول المستخدم
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     full_name = db.Column(db.String(100))
@@ -30,17 +20,17 @@ class User(db.Model):
     password = db.Column(db.String(255), nullable=False)
     birthdate = db.Column(db.String(20))
     profile_image_url = db.Column(db.String(500))
-    reset_code = db.Column(db.String(10))  # ← كود استرجاع كلمة المرور
 
-# إنشاء الجداول
+
 with app.app_context():
     db.create_all()
+
 
 @app.route('/')
 def home():
     return render_template('index.html')
 
-# Signup API
+#  API
 @app.route('/signup', methods=['POST'])
 def signup():
     data = request.get_json()
@@ -59,9 +49,12 @@ def signup():
     db.session.add(new_user)
     db.session.commit()
 
-    return jsonify({'message': 'Signup successful', 'user_id': new_user.id}), 200
+    return jsonify({
+        'message': 'Signup successful',
+        'user_id': new_user.id
+    }), 200
 
-# Login API
+#  API login
 @app.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
@@ -70,11 +63,14 @@ def login():
 
     user = User.query.filter_by(email=email).first()
     if user and bcrypt.checkpw(password.encode('utf-8'), user.password.encode('utf-8')):
-        return jsonify({'message': 'Login successful', 'user_id': user.id}), 200
+        return jsonify({
+            'message': 'Login successful',
+            'user_id': user.id
+        }), 200
     else:
         return jsonify({'message': 'Invalid credentials'}), 401
 
-# Get Profile
+#  API profile GET
 @app.route('/profile/<int:user_id>', methods=['GET'])
 def get_profile(user_id):
     user = User.query.get(user_id)
@@ -89,7 +85,7 @@ def get_profile(user_id):
         "profile_image_url": user.profile_image_url
     }), 200
 
-# Update Profile
+#  API profile PUT
 @app.route('/profile/<int:user_id>', methods=['PUT'])
 def update_profile(user_id):
     user = User.query.get(user_id)
@@ -102,9 +98,10 @@ def update_profile(user_id):
     user.profile_image_url = data.get("profile_image_url", user.profile_image_url)
 
     db.session.commit()
+
     return jsonify({"message": "Profile updated successfully"}), 200
 
-# Awareness Articles API
+#  API articles
 awareness_articles = [
     {
         "title": "Positive Parenting Tips",
@@ -112,7 +109,7 @@ awareness_articles = [
         "video_url": "https://www.youtube.com/embed/BbXPrO2AlDk",
         "link": "https://happyyouhappyfamily.com/positive-parenting-videos/"
     },
-{
+    {
         "title": "Child Mental Health & Wellbeing",
         "description": "Discover top 10 tips to promote your child's mental health...",
         "video_url": "https://www.youtube.com/embed/ld7tBeduqBI",
@@ -127,7 +124,8 @@ awareness_articles = [
     {
         "title": "Essentials for Parenting",
         "description": "Explore CDC's resources offering expert advice...",
-        "video_url": "https://www.youtube.com/embed/w1xHDmsSduA",
+        "video_url":
+        "https://www.youtube.com/embed/w1xHDmsSduA",
         "link": "https://www.cdc.gov/parents/essentials/index.html"
     },
 ]
@@ -136,61 +134,7 @@ awareness_articles = [
 def get_articles():
     return jsonify(awareness_articles)
 
-# 1️⃣ Send Reset Code
-@app.route('/send-reset-code', methods=['POST'])
-def send_reset_code():
-    data = request.get_json()
-    email = data.get('email')
-    user = User.query.filter_by(email=email).first()
-
-    if not user:
-        return jsonify({'message': 'Email not found'}), 404
-
-    code = str(random.randint(1000, 9999))
-    user.reset_code = code
-    db.session.commit()
-
-    msg = Message('Password Reset Code',
-                  sender='youremail@gmail.com',
-                  recipients=[email])
-    msg.body = f'Your reset code is: {code}'
-    mail.send(msg)
-
-    return jsonify({'message': 'Reset code sent successfully'}), 200
-
-# 2️⃣ Verify Code
-@app.route('/verify-reset-code', methods=['POST'])
-def verify_reset_code():
-    data = request.get_json()
-    email = data.get('email')
-    code = data.get('code')
-
-    user = User.query.filter_by(email=email).first()
-    if not user or user.reset_code != code:
-        return jsonify({'message': 'Invalid code'}), 400
-
-    return jsonify({'message': 'Code verified successfully'}), 200
-
-# 3️⃣ Reset Password
-@app.route('/reset-password', methods=['POST'])
-def reset_password():
-    data = request.get_json()
-    email = data.get('email')
-    new_password = data.get('new_password')
-    code = data.get('code')
-
-    user = User.query.filter_by(email=email).first()
-    if not user or user.reset_code != code:
-        return jsonify({'message': 'Invalid reset attempt'}), 400
-
-    hashed_password = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-    user.password = hashed_password
-    user.reset_code = None
-    db.session.commit()
-
-    return jsonify({'message': 'Password reset successful'}), 200
-
-# Run server
-if name == 'main':
+#  Run Server
+if name == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
