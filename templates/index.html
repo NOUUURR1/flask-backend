@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Mother's Awareness</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h2>Mother's Awareness</h2>
+
+        <div class="cards">
+    {% for article in articles %}
+        <div class="card blog-card">
+            <div class="avatar"></div>
+            <h3 class="blog-title">{{ article.title }}</h3>
+            <p class="blog-desc"><strong>Description :</strong> {{ article.description }}</p>
+            <div class="blog-buttons">
+                <a class="btn" href="{{ article.video_url }}" target="_blank">🎥 Watch video</a>
+                <a class="btn" href="{{ article.link }}" target="_blank">📖 Read full Article</a>
+            </div>
+        </div>
+    {% endfor %}
+</div>
+    </div>
+</body>
+</html>
