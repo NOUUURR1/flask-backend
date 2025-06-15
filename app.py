@@ -4,7 +4,7 @@ from flask_cors import CORS
 import bcrypt
 import os
 
-app = Flask(name, static_folder='static', template_folder='templates')
+app = Flask(__name__, static_folder='static', template_folder='templates')
 CORS(app)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
@@ -125,6 +125,6 @@ def get_articles():
     return jsonify(awareness_articles)
 
 
-if name == 'main':
+if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
