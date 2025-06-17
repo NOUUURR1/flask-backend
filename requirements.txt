@@ -5,4 +5,4 @@ bcrypt==4.3.0
 gunicorn
 Flask-Mail # لإرسال الإيميلات 
 itsdangerous # لتوليد توكنات مؤقتة آمنة
-psycopg2-binary
+psycopg2
