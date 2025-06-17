@@ -32,9 +32,9 @@ mail = Mail(app)
 # IMPORTANT: This must be set as an environment variable in Railway for production!
 secret_key = os.environ.get('SECRET_KEY')
 if not secret_key:
-    # Fallback for local development, but will raise error if not set in production
-    print("WARNING: SECRET_KEY environment variable is not set. Using a default for local dev.")
-    secret_key = 'a_fallback_secret_key_for_development_only' 
+    # هذا السطر سيجبرك على تعيين SECRET_KEY كمتغير بيئة في Railway،
+    # مما يضمن عدم وجود قيمة افتراضية غير آمنة في الكود المصدري.
+    raise ValueError("SECRET_KEY environment variable is not set. It is required for security.")
 s = URLSafeTimedSerializer(secret_key)
 
 
