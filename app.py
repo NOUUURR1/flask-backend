@@ -7,18 +7,15 @@ import secrets
 from datetime import datetime, timedelta
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadTimeSignature
 from flask_mail import Mail, Message
+from flask_jwt_extended import JWTManager, jwt_required, create_access_token, get_jwt_identity
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 CORS(app)
 
-# Configuration for Database
-# DATABASE_URL will be provided by Railway automatically if Postgres service is linked
-# Otherwise, it defaults to sqlite:///users.db for local development
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///users.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-# Configuration for Flask-Mail
 app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER')
 app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 587))
 app.config['MAIL_USE_TLS'] = os.environ.get('MAIL_USE_TLS', 'True').lower() == 'true'
@@ -28,12 +25,13 @@ app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER')
 
 mail = Mail(app)
 
-# SECRET_KEY for token serialization
-# IMPORTANT: This must be set as an environment variable in Railway for production!
 secret_key = os.environ.get('SECRET_KEY')
 if not secret_key:
     raise ValueError("SECRET_KEY environment variable is not set. It is required for security.")
 s = URLSafeTimedSerializer(secret_key)
+
+app.config["JWT_SECRET_KEY"] = os.environ.get('JWT_SECRET_KEY', 'your-jwt-secret-key')
+jwt = JWTManager(app)
 
 
 class User(db.Model):
@@ -54,6 +52,7 @@ with app.app_context():
 @app.route('/')
 def home():
     return render_template('index.html')
+
 
 @app.route('/signup', methods=['POST'])
 def signup():
@@ -78,6 +77,7 @@ def signup():
         'user_id': new_user.id
     }), 200
 
+
 @app.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
@@ -86,15 +86,23 @@ def login():
 
     user = User.query.filter_by(email=email).first()
     if user and bcrypt.checkpw(password.encode('utf-8'), user.password.encode('utf-8')):
+        access_token = create_access_token(identity=user.id)
         return jsonify({
             'message': 'Login successful',
-            'user_id': user.id
+            'user_id': user.id,
+            'access_token': access_token
         }), 200
     else:
         return jsonify({'message': 'Invalid credentials'}), 401
 
+
 @app.route('/profile/<int:user_id>', methods=['GET'])
+@jwt_required()
 def get_profile(user_id):
+    current_user_id = get_jwt_identity()
+    if current_user_id != user_id:
+        return jsonify({"error": "Unauthorized"}), 403
+
     user = User.query.get(user_id)
     if not user:
         return jsonify({"error": "User not found"}), 404
@@ -107,8 +115,14 @@ def get_profile(user_id):
         "profile_image_url": user.profile_image_url
     }), 200
 
+
 @app.route('/profile/<int:user_id>', methods=['PUT'])
+@jwt_required()
 def update_profile(user_id):
+    current_user_id = get_jwt_identity()
+    if current_user_id != user_id:
+        return jsonify({"error": "Unauthorized"}), 403
+
     user = User.query.get(user_id)
     if not user:
         return jsonify({"error": "User not found"}), 404
@@ -121,6 +135,7 @@ def update_profile(user_id):
     db.session.commit()
 
     return jsonify({"message": "Profile updated successfully"}), 200
+
 
 awareness_articles = [
     {
@@ -149,9 +164,11 @@ awareness_articles = [
     },
 ]
 
+
 @app.route("/api/articles")
 def get_articles():
     return jsonify(awareness_articles)
+
 
 @app.route('/api/v1/password/forgot', methods=['POST'])
 def send_reset_code_to_email():
@@ -161,7 +178,6 @@ def send_reset_code_to_email():
 
     user = User.query.filter_by(email=email).first()
     if not user:
-        # For security, always return a success message even if user not found
         return jsonify({"status": "success", "message": "If your email is registered, a reset code has been sent."}), 200
 
     reset_code = secrets.token_hex(3).upper()
@@ -173,7 +189,7 @@ def send_reset_code_to_email():
 
     try:
         msg = Message("Your Password Reset Code",
-                      recipients=[user.email])
+                        recipients=[user.email])
         msg.body = f"Hello {user.full_name},\n\nYour password reset code is: {reset_code}\n\nThis code will expire in 15 minutes. If you did not request a password reset, please ignore this email.\n\nRegards,\nYour App Team"
         mail.send(msg)
         return jsonify({"status": "success", "message": "If your email is registered, a reset code has been sent."}), 200
@@ -193,7 +209,7 @@ def verify_reset_code():
     user = User.query.filter_by(email=email).first()
 
     if not user or user.reset_code != code or \
-       not user.reset_code_expires_at or user.reset_code_expires_at < datetime.now():
+            not user.reset_code_expires_at or user.reset_code_expires_at < datetime.now():
         return jsonify({"status": "error", "message": "Invalid or expired reset code."}), 400
 
     reset_token = s.dumps({'email': user.email, 'action': 'reset_password'})
@@ -219,13 +235,12 @@ def reset_password():
     if new_password != confirm_new_password:
         return jsonify({"status": "error", "message": "Passwords do not match."}), 400
 
-    # Strong password validation
     if len(new_password) < 8 or not any(char.isdigit() for char in new_password) \
-       or not any(char.isupper() for char in new_password) or not any(char.islower() for char in new_password):
+            or not any(char.isupper() for char in new_password) or not any(char.islower() for char in new_password):
         return jsonify({"status": "error", "message": "Password must be at least 8 characters long and contain uppercase, lowercase, and numbers."}), 400
 
     try:
-        token_data = s.loads(reset_token, max_age=300) # max_age in seconds (5 minutes)
+        token_data = s.loads(reset_token, max_age=300)
         if token_data['email'] != email or token_data['action'] != 'reset_password':
             raise BadTimeSignature
     except SignatureExpired:
@@ -237,7 +252,6 @@ def reset_password():
     if not user:
         return jsonify({"status": "error", "message": "User not found."}), 404
 
-    # Clear the temporary reset code and expiry after successful token verification
     user.reset_code = None
     user.reset_code_expires_at = None
 
@@ -247,8 +261,7 @@ def reset_password():
 
     return jsonify({"status": "success", "message": "Your password has been reset successfully."}), 200
 
+
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
-    # This block is for local development only. Railway uses Gunicorn for production.
-    # Keep debug=True for local development for automatic code reloading and debugger.
     app.run(host='0.0.0.0', port=port, debug=True)
