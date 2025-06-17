@@ -11,20 +11,31 @@ from flask_mail import Mail, Message
 app = Flask(__name__, static_folder='static', template_folder='templates')
 CORS(app)
 
+# Configuration for Database
+# DATABASE_URL will be provided by Railway automatically if Postgres service is linked
+# Otherwise, it defaults to sqlite:///users.db for local development
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///users.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
+# Configuration for Flask-Mail
+app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER')
 app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 587))
 app.config['MAIL_USE_TLS'] = os.environ.get('MAIL_USE_TLS', 'True').lower() == 'true'
-app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', 'your_email@example.com')
-app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD', 'your_email_password')
-app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER', 'your_email@example.com')
+app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
+app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
+app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER')
 
 mail = Mail(app)
 
-s = URLSafeTimedSerializer(os.environ.get('SECRET_KEY', 'this_is_a_very_strong_secret_key_that_must_be_changed_in_production'))
+# SECRET_KEY for token serialization
+# IMPORTANT: This must be set as an environment variable in Railway for production!
+secret_key = os.environ.get('SECRET_KEY')
+if not secret_key:
+    # Fallback for local development, but will raise error if not set in production
+    print("WARNING: SECRET_KEY environment variable is not set. Using a default for local dev.")
+    secret_key = 'a_fallback_secret_key_for_development_only' 
+s = URLSafeTimedSerializer(secret_key)
 
 
 class User(db.Model):
@@ -152,6 +163,7 @@ def send_reset_code_to_email():
 
     user = User.query.filter_by(email=email).first()
     if not user:
+        # For security, always return a success message even if user not found
         return jsonify({"status": "success", "message": "If your email is registered, a reset code has been sent."}), 200
 
     reset_code = secrets.token_hex(3).upper()
@@ -209,12 +221,13 @@ def reset_password():
     if new_password != confirm_new_password:
         return jsonify({"status": "error", "message": "Passwords do not match."}), 400
 
+    # Strong password validation
     if len(new_password) < 8 or not any(char.isdigit() for char in new_password) \
        or not any(char.isupper() for char in new_password) or not any(char.islower() for char in new_password):
         return jsonify({"status": "error", "message": "Password must be at least 8 characters long and contain uppercase, lowercase, and numbers."}), 400
 
     try:
-        token_data = s.loads(reset_token, max_age=300)
+        token_data = s.loads(reset_token, max_age=300) # max_age in seconds (5 minutes)
         if token_data['email'] != email or token_data['action'] != 'reset_password':
             raise BadTimeSignature
     except SignatureExpired:
@@ -226,6 +239,7 @@ def reset_password():
     if not user:
         return jsonify({"status": "error", "message": "User not found."}), 404
 
+    # Clear the temporary reset code and expiry after successful token verification
     user.reset_code = None
     user.reset_code_expires_at = None
 
@@ -237,4 +251,6 @@ def reset_password():
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
+    # This block is for local development only. Railway uses Gunicorn for production.
+    # Keep debug=True for local development for automatic code reloading and debugger.
     app.run(host='0.0.0.0', port=port, debug=True)
