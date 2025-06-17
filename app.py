@@ -3,13 +3,28 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 import bcrypt
 import os
+import secrets
+from datetime import datetime, timedelta
+from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadTimeSignature
+from flask_mail import Mail, Message
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 CORS(app)
 
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///users.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
+
+app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
+app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 587))
+app.config['MAIL_USE_TLS'] = os.environ.get('MAIL_USE_TLS', 'True').lower() == 'true'
+app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', 'your_email@example.com')
+app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD', 'your_email_password')
+app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER', 'your_email@example.com')
+
+mail = Mail(app)
+
+s = URLSafeTimedSerializer(os.environ.get('SECRET_KEY', 'this_is_a_very_strong_secret_key_that_must_be_changed_in_production'))
 
 
 class User(db.Model):
@@ -19,6 +34,8 @@ class User(db.Model):
     password = db.Column(db.String(255), nullable=False)
     birthdate = db.Column(db.String(20))
     profile_image_url = db.Column(db.String(500))
+    reset_code = db.Column(db.String(100), nullable=True)
+    reset_code_expires_at = db.Column(db.DateTime, nullable=True)
 
 
 with app.app_context():
@@ -28,7 +45,6 @@ with app.app_context():
 @app.route('/')
 def home():
     return render_template('index.html')
-
 
 @app.route('/signup', methods=['POST'])
 def signup():
@@ -48,8 +64,10 @@ def signup():
     db.session.add(new_user)
     db.session.commit()
 
-    return jsonify({'message': 'Signup successful', 'user_id': new_user.id}), 200
-
+    return jsonify({
+        'message': 'Signup successful',
+        'user_id': new_user.id
+    }), 200
 
 @app.route('/login', methods=['POST'])
 def login():
@@ -59,10 +77,12 @@ def login():
 
     user = User.query.filter_by(email=email).first()
     if user and bcrypt.checkpw(password.encode('utf-8'), user.password.encode('utf-8')):
-        return jsonify({'message': 'Login successful', 'user_id': user.id}), 200
+        return jsonify({
+            'message': 'Login successful',
+            'user_id': user.id
+        }), 200
     else:
         return jsonify({'message': 'Invalid credentials'}), 401
-
 
 @app.route('/profile/<int:user_id>', methods=['GET'])
 def get_profile(user_id):
@@ -78,7 +98,6 @@ def get_profile(user_id):
         "profile_image_url": user.profile_image_url
     }), 200
 
-
 @app.route('/profile/<int:user_id>', methods=['PUT'])
 def update_profile(user_id):
     user = User.query.get(user_id)
@@ -91,8 +110,8 @@ def update_profile(user_id):
     user.profile_image_url = data.get("profile_image_url", user.profile_image_url)
 
     db.session.commit()
-    return jsonify({"message": "Profile updated successfully"}), 200
 
+    return jsonify({"message": "Profile updated successfully"}), 200
 
 awareness_articles = [
     {
@@ -120,10 +139,101 @@ awareness_articles = [
         "link": "https://www.cdc.gov/parents/essentials/index.html"
     },
 ]
+
 @app.route("/api/articles")
 def get_articles():
     return jsonify(awareness_articles)
 
+@app.route('/api/v1/password/forgot', methods=['POST'])
+def send_reset_code_to_email():
+    email = request.json.get('email')
+    if not email:
+        return jsonify({"status": "error", "message": "Email is required."}), 400
+
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        return jsonify({"status": "success", "message": "If your email is registered, a reset code has been sent."}), 200
+
+    reset_code = secrets.token_hex(3).upper()
+    expires_at = datetime.now() + timedelta(minutes=15)
+
+    user.reset_code = reset_code
+    user.reset_code_expires_at = expires_at
+    db.session.commit()
+
+    try:
+        msg = Message("Your Password Reset Code",
+                      recipients=[user.email])
+        msg.body = f"Hello {user.full_name},\n\nYour password reset code is: {reset_code}\n\nThis code will expire in 15 minutes. If you did not request a password reset, please ignore this email.\n\nRegards,\nYour App Team"
+        mail.send(msg)
+        return jsonify({"status": "success", "message": "If your email is registered, a reset code has been sent."}), 200
+    except Exception as e:
+        print(f"Error sending email: {e}")
+        return jsonify({"status": "error", "message": "Failed to send reset code. Please try again later."}), 500
+
+
+@app.route('/api/v1/password/verify-reset-code', methods=['POST'])
+def verify_reset_code():
+    email = request.json.get('email')
+    code = request.json.get('code')
+
+    if not email or not code:
+        return jsonify({"status": "error", "message": "Email and code are required."}), 400
+
+    user = User.query.filter_by(email=email).first()
+
+    if not user or user.reset_code != code or \
+       not user.reset_code_expires_at or user.reset_code_expires_at < datetime.now():
+        return jsonify({"status": "error", "message": "Invalid or expired reset code."}), 400
+
+    reset_token = s.dumps({'email': user.email, 'action': 'reset_password'})
+    
+    return jsonify({
+        "status": "success",
+        "message": "Code verified successfully.",
+        "resetToken": reset_token
+    }), 200
+
+
+@app.route('/api/v1/password/reset', methods=['POST'])
+def reset_password():
+    data = request.get_json()
+    email = data.get('email')
+    new_password = data.get('newPassword')
+    confirm_new_password = data.get('confirmNewPassword')
+    reset_token = data.get('resetToken')
+
+    if not email or not new_password or not confirm_new_password or not reset_token:
+        return jsonify({"status": "error", "message": "Missing required fields."}), 400
+
+    if new_password != confirm_new_password:
+        return jsonify({"status": "error", "message": "Passwords do not match."}), 400
+
+    if len(new_password) < 8 or not any(char.isdigit() for char in new_password) \
+       or not any(char.isupper() for char in new_password) or not any(char.islower() for char in new_password):
+        return jsonify({"status": "error", "message": "Password must be at least 8 characters long and contain uppercase, lowercase, and numbers."}), 400
+
+    try:
+        token_data = s.loads(reset_token, max_age=300)
+        if token_data['email'] != email or token_data['action'] != 'reset_password':
+            raise BadTimeSignature
+    except SignatureExpired:
+        return jsonify({"status": "error", "message": "Reset token has expired."}), 400
+    except BadTimeSignature:
+        return jsonify({"status": "error", "message": "Invalid reset token."}), 400
+
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        return jsonify({"status": "error", "message": "User not found."}), 404
+
+    user.reset_code = None
+    user.reset_code_expires_at = None
+
+    hashed_password = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    user.password = hashed_password
+    db.session.commit()
+
+    return jsonify({"status": "success", "message": "Your password has been reset successfully."}), 200
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
