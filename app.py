@@ -189,7 +189,7 @@ def send_reset_code_to_email():
 
     try:
         msg = Message("Your Password Reset Code",
-                        recipients=[user.email])
+                      recipients=[user.email])
         msg.body = f"Hello {user.full_name},\n\nYour password reset code is: {reset_code}\n\nThis code will expire in 15 minutes. If you did not request a password reset, please ignore this email.\n\nRegards,\nYour App Team"
         mail.send(msg)
         return jsonify({"status": "success", "message": "If your email is registered, a reset code has been sent."}), 200
@@ -208,12 +208,17 @@ def verify_reset_code():
 
     user = User.query.filter_by(email=email).first()
 
-    if not user or user.reset_code != code or \
-            not user.reset_code_expires_at or user.reset_code_expires_at < datetime.now():
+    if not user:
+        return jsonify({"status": "error", "message": "Invalid or expired reset code."}), 400
+
+    if user.reset_code != code:
+        return jsonify({"status": "error", "message": "Invalid or expired reset code."}), 400
+
+    if not user.reset_code_expires_at or user.reset_code_expires_at < datetime.now():
         return jsonify({"status": "error", "message": "Invalid or expired reset code."}), 400
 
     reset_token = s.dumps({'email': user.email, 'action': 'reset_password'})
-    
+
     return jsonify({
         "status": "success",
         "message": "Code verified successfully.",
