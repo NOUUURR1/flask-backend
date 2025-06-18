@@ -187,17 +187,11 @@ def send_reset_code_to_email():
     user.reset_code_expires_at = expires_at
     db.session.commit()
 
-
-    print(f"DEBUG: Saved reset_code for {email}: {user.reset_code}")
-    print(f"DEBUG: Expires at for {email}: {user.reset_code_expires_at}")
-
     try:
         msg = Message("Your Password Reset Code",
-                      recipients=[user.email])
+                        recipients=[user.email])
         msg.body = f"Hello {user.full_name},\n\nYour password reset code is: {reset_code}\n\nThis code will expire in 15 minutes. If you did not request a password reset, please ignore this email.\n\nRegards,\nYour App Team"
         mail.send(msg)
-        # أضف هذه الأسطر لطباعة الرمز المرسل في البريد الإلكتروني
-        print(f"DEBUG: Email sent to {user.email} with code: {reset_code}")
         return jsonify({"status": "success", "message": "If your email is registered, a reset code has been sent."}), 200
     except Exception as e:
         print(f"Error sending email: {e}")
@@ -209,30 +203,17 @@ def verify_reset_code():
     email = request.json.get('email')
     code = request.json.get('code')
 
-    print(f"DEBUG: Received verification request for email: {email}, code: {code}")  
-
     if not email or not code:
         return jsonify({"status": "error", "message": "Email and code are required."}), 400
 
     user = User.query.filter_by(email=email).first()
 
-    if not user:
-        print(f"DEBUG: User not found for email: {email}")
-        return jsonify({"status": "error", "message": "Invalid or expired reset code."}), 400
-
-    print(f"DEBUG: User found. Stored code: {user.reset_code}, Expiry: {user.reset_code_expires_at}")
-
-    if user.reset_code != code:
-        print(f"DEBUG: Code mismatch. Received: {code}, Stored: {user.reset_code}")
-        return jsonify({"status": "error", "message": "Invalid or expired reset code."}), 400
-
-    if not user.reset_code_expires_at or user.reset_code_expires_at < datetime.now():
-        print(f"DEBUG: Code expired or no expiry set. Expiry: {user.reset_code_expires_at}, Current: {datetime.now()}")
+    if not user or user.reset_code != code or \
+            not user.reset_code_expires_at or user.reset_code_expires_at < datetime.now():
         return jsonify({"status": "error", "message": "Invalid or expired reset code."}), 400
 
     reset_token = s.dumps({'email': user.email, 'action': 'reset_password'})
-    print(f"DEBUG: Code verified successfully for {email}. Reset token generated.")
-
+    
     return jsonify({
         "status": "success",
         "message": "Code verified successfully.",
@@ -254,7 +235,7 @@ def reset_password():
     if new_password != confirm_new_password:
         return jsonify({"status": "error", "message": "Passwords do not match."}), 400
 
-    if len(new_password) < 8 or not any(char.isdigit() for char in new_password)
+    if len(new_password) < 8 or not any(char.isdigit() for char in new_password) \
             or not any(char.isupper() for char in new_password) or not any(char.islower() for char in new_password):
         return jsonify({"status": "error", "message": "Password must be at least 8 characters long and contain uppercase, lowercase, and numbers."}), 400
 
@@ -262,10 +243,10 @@ def reset_password():
         token_data = s.loads(reset_token, max_age=300)
         if token_data['email'] != email or token_data['action'] != 'reset_password':
             raise BadTimeSignature
-        except SignatureExpired:
-            return jsonify({"status": "error", "message": "Reset token has expired."}), 400
-        except BadTimeSignature:
-            return jsonify({"status": "error", "message": "Invalid reset token."}), 400
+    except SignatureExpired:
+        return jsonify({"status": "error", "message": "Reset token has expired."}), 400
+    except BadTimeSignature:
+        return jsonify({"status": "error", "message": "Invalid reset token."}), 400
 
     user = User.query.filter_by(email=email).first()
     if not user:
@@ -284,8 +265,3 @@ def reset_password():
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
-"""
-        )
-print("\n")
-print("I've added the debug print statements to your code. Please replace your existing code with this.")
-print("Then, follow the debugging steps I outlined in the previous response to identify where the mismatch is occurring.")
