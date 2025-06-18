@@ -99,6 +99,8 @@ def login():
 @app.route('/profile/<int:user_id>', methods=['GET'])
 @jwt_required()
 def get_profile(user_id):
+    print(f"DEBUG: In get_profile - Type of user_id: {type(user_id)}, Value: {user_id}") 
+    
     current_user_id = get_jwt_identity()
     if current_user_id != user_id:
         return jsonify({"error": "Unauthorized"}), 403
