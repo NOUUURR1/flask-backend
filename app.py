@@ -185,6 +185,10 @@ def send_reset_code_to_email():
 
     user.reset_code = reset_code
     user.reset_code_expires_at = expires_at
+
+    print(f"DEBUG: Saved reset_code for {email}: {user.reset_code}")
+    print(f"DEBUG: Expires at for {email}: {user.reset_code_expires_at}")
+
     db.session.commit()
 
     try:
@@ -192,6 +196,7 @@ def send_reset_code_to_email():
                       recipients=[user.email])
         msg.body = f"Hello {user.full_name},\n\nYour password reset code is: {reset_code}\n\nThis code will expire in 15 minutes. If you did not request a password reset, please ignore this email.\n\nRegards,\nYour App Team"
         mail.send(msg)
+        print(f"DEBUG: Email sent to {user.email} with code: {reset_code}")
         return jsonify({"status": "success", "message": "If your email is registered, a reset code has been sent."}), 200
     except Exception as e:
         print(f"Error sending email: {e}")
@@ -203,21 +208,29 @@ def verify_reset_code():
     email = request.json.get('email')
     code = request.json.get('code')
 
+    print(f"DEBUG: Received verification request for email: {email}, code: {code}")
+
     if not email or not code:
         return jsonify({"status": "error", "message": "Email and code are required."}), 400
 
     user = User.query.filter_by(email=email).first()
 
     if not user:
+        print(f"DEBUG: User not found for email: {email}")
         return jsonify({"status": "error", "message": "Invalid or expired reset code."}), 400
 
+    print(f"DEBUG: User found. Stored code: {user.reset_code}, Expiry: {user.reset_code_expires_at}, Current Time: {datetime.now()}")
+
     if user.reset_code != code:
+        print(f"DEBUG: Code mismatch. Received: {code}, Stored: {user.reset_code}")
         return jsonify({"status": "error", "message": "Invalid or expired reset code."}), 400
 
     if not user.reset_code_expires_at or user.reset_code_expires_at < datetime.now():
+        print(f"DEBUG: Code expired or no expiry set. Expiry: {user.reset_code_expires_at}, Current: {datetime.now()}")
         return jsonify({"status": "error", "message": "Invalid or expired reset code."}), 400
 
     reset_token = s.dumps({'email': user.email, 'action': 'reset_password'})
+    print(f"DEBUG: Code verified successfully for {email}. Reset token generated.")
 
     return jsonify({
         "status": "success",
